@@ -4,6 +4,13 @@
   var STORAGE_KEY = "v2board_admin_locale";
   var LEGACY_STORAGE_KEY = "umi_locale";
   var DEFAULT_LOCALE = "en-US";
+  var THEME_MEDIA_QUERY = "(prefers-color-scheme: dark)";
+  var DARK_MODE_COOKIE = "dark_mode";
+  var darkModeMedia = root.matchMedia
+    ? root.matchMedia(THEME_MEDIA_QUERY)
+    : null;
+  var systemThemeListenerAttached = false;
+  var applyingSystemTheme = false;
   var ATTRIBUTE_NAMES = ["placeholder", "title", "aria-label", "data-placeholder", "alt"];
   var SKIPPED_ELEMENTS = {
     CODE: true,
@@ -30,6 +37,8 @@
   var menuShadow = null;
   var textRecords = new WeakMap();
   var attributeRecords = new WeakMap();
+
+  primeSystemTheme();
 
   function hasLocale(locale) {
     return Object.prototype.hasOwnProperty.call(LOCALES, locale);
@@ -69,6 +78,88 @@
       normalizeLocale(browserLocale) ||
       DEFAULT_LOCALE
     );
+  }
+
+  function getCookie(name) {
+    var prefix = name + "=";
+    var cookies = document.cookie ? document.cookie.split(";") : [];
+    for (var index = 0; index < cookies.length; index += 1) {
+      var cookie = cookies[index].trim();
+      if (cookie.indexOf(prefix) === 0) {
+        return decodeURIComponent(cookie.slice(prefix.length));
+      }
+    }
+    return null;
+  }
+
+  function setDarkModeCookie(enabled) {
+    var expires = new Date(
+      Date.now() + 365 * 24 * 60 * 60 * 1000,
+    ).toUTCString();
+    document.cookie =
+      DARK_MODE_COOKIE +
+      "=" +
+      (enabled ? "1" : "0") +
+      ";expires=" +
+      expires +
+      ";path=/;SameSite=Lax";
+  }
+
+  function getSystemDarkPreference() {
+    return darkModeMedia ? darkModeMedia.matches : null;
+  }
+
+  function primeSystemTheme() {
+    var prefersDark = getSystemDarkPreference();
+    if (prefersDark !== null) setDarkModeCookie(prefersDark);
+  }
+
+  function updateThemeActionLabel(action) {
+    action = action || findThemeAction();
+    if (!action) return;
+
+    var prefersDark = getSystemDarkPreference();
+    var label =
+      prefersDark === null
+        ? "Theme"
+        : "Theme follows system: " + (prefersDark ? "Dark" : "Light");
+    action.title = label;
+    action.setAttribute("aria-label", label);
+    action.setAttribute("data-v2board-system-theme", "true");
+  }
+
+  function applySystemTheme() {
+    var prefersDark = getSystemDarkPreference();
+    if (prefersDark === null) return;
+
+    var isDark = getCookie(DARK_MODE_COOKIE) === "1";
+    var action = findThemeAction();
+    if (isDark !== prefersDark && action && isVisible(action)) {
+      applyingSystemTheme = true;
+      try {
+        action.click();
+      } finally {
+        applyingSystemTheme = false;
+      }
+      isDark = getCookie(DARK_MODE_COOKIE) === "1";
+    }
+
+    if (isDark !== prefersDark) setDarkModeCookie(prefersDark);
+    updateThemeActionLabel(action);
+  }
+
+  function attachSystemThemeListener() {
+    if (!darkModeMedia || systemThemeListenerAttached) return;
+
+    var handleChange = function () {
+      applySystemTheme();
+    };
+    if (darkModeMedia.addEventListener) {
+      darkModeMedia.addEventListener("change", handleChange);
+    } else if (darkModeMedia.addListener) {
+      darkModeMedia.addListener(handleChange);
+    }
+    systemThemeListenerAttached = true;
   }
 
   function getDictionary(locale) {
@@ -458,6 +549,18 @@
       "--v2board-language-radius",
       style.borderRadius || "3px",
     );
+    switcherHost.style.setProperty(
+      "--v2board-language-border",
+      [style.borderTopWidth, style.borderTopStyle, style.borderTopColor].join(" "),
+    );
+    switcherHost.style.setProperty(
+      "--v2board-language-shadow",
+      style.boxShadow || "none",
+    );
+    switcherHost.style.setProperty(
+      "--v2board-language-gap",
+      style.marginRight || "0px",
+    );
   }
 
   function placeLanguageSwitcher() {
@@ -502,6 +605,7 @@
       themeAction || accountAction,
       themeChild || themeAction || accountChild || accountAction,
     );
+    updateThemeActionLabel(themeAction);
   }
 
   function closeLanguageMenu() {
@@ -573,13 +677,18 @@
     style.textContent =
       ":host{--v2board-language-color:#fff;--v2board-language-height:36px;" +
       "--v2board-language-width:36px;--v2board-language-radius:3px;" +
+      "--v2board-language-border:0px solid transparent;" +
+      "--v2board-language-shadow:none;--v2board-language-gap:0px;" +
       "align-items:center;box-sizing:border-box;display:inline-flex;flex:0 0 auto;" +
-      "height:var(--v2board-language-height);line-height:normal;position:relative;" +
+      "height:var(--v2board-language-height);line-height:normal;" +
+      "margin:0 var(--v2board-language-gap) 0 0;position:relative;" +
       "vertical-align:middle;width:var(--v2board-language-width);z-index:2147483647}" +
-      ":host([data-floating]){align-self:auto;position:fixed;right:16px;top:14px;" +
+      ":host([data-floating]){align-self:auto;margin:0;position:fixed;right:16px;top:14px;" +
       "z-index:2147483647}" +
-      ".trigger{align-items:center;background:transparent;border:0;" +
-      "border-radius:var(--v2board-language-radius);box-sizing:border-box;" +
+      ".trigger{align-items:center;background:transparent;" +
+      "border:var(--v2board-language-border);" +
+      "border-radius:var(--v2board-language-radius);box-shadow:var(--v2board-language-shadow);" +
+      "box-sizing:border-box;" +
       "color:var(--v2board-language-color);cursor:pointer;display:inline-flex;" +
       "height:100%;justify-content:center;margin:0;min-height:0;padding:0;" +
       "transition:background .2s ease;width:100%}" +
@@ -716,10 +825,12 @@
   }
 
   function start() {
+    attachSystemThemeListener();
     updateDocumentLanguage();
     createLanguageSwitcher();
     translateTree(document.body);
     observeChanges();
+    root.setTimeout(applySystemTheme, 0);
   }
 
   root.V2BOARD_ADMIN_I18N_API = {
@@ -730,6 +841,10 @@
       return Object.keys(LOCALES);
     },
     setLocale: setLocale,
+    getThemeMode: function () {
+      return "system";
+    },
+    applySystemTheme: applySystemTheme,
   };
 
   if (document.readyState === "loading") {
