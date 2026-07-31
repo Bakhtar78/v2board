@@ -99,8 +99,11 @@
     var style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent =
-      "#sidebar .v2board-copyright{" +
-      "align-items:center;display:flex;gap:.35rem;opacity:1;white-space:nowrap}" +
+      "#sidebar>.v2board-admin-sidebar-toggle{" +
+      "bottom:12px!important;left:20px!important;position:absolute!important;" +
+      "right:auto!important;z-index:1040}" +
+      "#page-container.sidebar-r #sidebar>.v2board-admin-sidebar-toggle{" +
+      "left:auto!important;right:20px!important}" +
       "#sidebar .v2board-sidebar-footer-text{opacity:.2}" +
       "@media(min-width:992px){" +
       rootSelector + " #page-container.sidebar-o{" +
@@ -158,12 +161,16 @@
       rootSelector + " #page-container.sidebar-o #sidebar .smini-show{" +
       "opacity:1!important}" +
       rootSelector + " #page-container.sidebar-o #sidebar .smini-hidden.bg-header-dark{" +
-      "display:block!important;height:var(--v2board-sidebar-brand-height)!important;" +
-      "min-height:var(--v2board-sidebar-brand-height)!important;overflow:hidden!important}" +
+      "box-sizing:border-box!important;display:block!important;" +
+      "height:var(--v2board-sidebar-brand-height)!important;" +
+      "max-width:250px!important;min-height:var(--v2board-sidebar-brand-height)!important;" +
+      "min-width:250px!important;overflow:hidden!important;width:250px!important}" +
       rootSelector + " #page-container.sidebar-o #sidebar .smini-hidden.bg-header-dark .content-header{" +
       "background-color:var(--v2board-sidebar-brand-bg)!important;" +
+      "box-sizing:border-box!important;display:flex!important;" +
       "height:var(--v2board-sidebar-brand-height)!important;" +
-      "min-height:var(--v2board-sidebar-brand-height)!important}" +
+      "max-width:250px!important;min-height:var(--v2board-sidebar-brand-height)!important;" +
+      "min-width:250px!important;width:250px!important}" +
       rootSelector + " #page-container.sidebar-o #sidebar .smini-hidden.bg-header-dark .content-header>*{" +
       "visibility:hidden!important}" +
       rootSelector + " #page-container.sidebar-o #sidebar .smini-visible{" +
@@ -172,37 +179,43 @@
       "display:block!important}" +
       rootSelector + " #page-container.sidebar-o #sidebar .nav-main>.nav-main-item>.nav-main-submenu{" +
       "display:none!important}" +
-      rootSelector + " #page-container.sidebar-o #sidebar .v2board-copyright{" +
-      "display:flex!important;justify-content:center!important;left:0!important;" +
-      "opacity:1!important;right:auto!important;visibility:visible!important;width:64px!important}" +
       rootSelector + " #page-container.sidebar-o #sidebar .v2board-sidebar-footer-text{" +
       "display:none!important}" +
-      rootSelector + " #page-container.sidebar-o #sidebar #v2board-admin-sidebar-toggle{" +
-      "display:inline-flex!important;opacity:1!important;visibility:visible!important}" +
+      rootSelector + " #page-container.sidebar-o #sidebar>.v2board-admin-sidebar-toggle{" +
+      "display:inline-flex!important;left:calc(100% - 44px)!important;" +
+      "opacity:1!important;right:auto!important;visibility:visible!important}" +
+      rootSelector + " #page-container.sidebar-o.sidebar-r #sidebar>.v2board-admin-sidebar-toggle{" +
+      "left:20px!important;right:auto!important}" +
       "}";
 
     (document.head || document.documentElement).appendChild(style);
   }
 
   function preserveBrandArea(sidebar) {
-    var brand = sidebar && sidebar.querySelector(".content-header");
-    if (!brand) return;
+    var wrapper =
+      sidebar && sidebar.querySelector(".smini-hidden.bg-header-dark");
+    var brand =
+      (wrapper && wrapper.querySelector(".content-header")) ||
+      (sidebar && sidebar.querySelector(".content-header"));
+    if (!sidebar || !brand) return;
 
     var pageHeader = document.getElementById("page-header");
     var color = getBackgroundColor(pageHeader) || getBackgroundColor(brand);
-    var height = brand.getBoundingClientRect
+    var measuredHeight = brand.getBoundingClientRect
       ? brand.getBoundingClientRect().height
       : 0;
+    var savedHeight = parseFloat(
+      sidebar.style.getPropertyValue("--v2board-sidebar-brand-height"),
+    );
+    var stableHeight = Math.max(savedHeight || 0, measuredHeight || 0, 52);
 
     if (color) {
       sidebar.style.setProperty("--v2board-sidebar-brand-bg", color);
     }
-    if (height) {
-      sidebar.style.setProperty(
-        "--v2board-sidebar-brand-height",
-        height + "px",
-      );
-    }
+    sidebar.style.setProperty(
+      "--v2board-sidebar-brand-height",
+      stableHeight + "px",
+    );
   }
 
   function updateToggle() {
@@ -276,13 +289,11 @@
     if (document.getElementById("v2board-admin-sidebar-toggle")) return;
 
     var sidebar = document.getElementById("sidebar");
-    var footer = sidebar && sidebar.querySelector(".v2board-copyright");
-    if (!sidebar || !footer) return;
-
-    wrapFooterText(footer);
+    if (!sidebar) return;
 
     toggleHost = document.createElement("span");
     toggleHost.id = "v2board-admin-sidebar-toggle";
+    toggleHost.className = "v2board-admin-sidebar-toggle";
     toggleHost.setAttribute("dir", "ltr");
 
     var shadow = toggleHost.attachShadow({ mode: "open" });
@@ -310,7 +321,7 @@
 
     shadow.appendChild(style);
     shadow.appendChild(button);
-    footer.appendChild(toggleHost);
+    sidebar.appendChild(toggleHost);
     updateToggle();
   }
 
@@ -323,6 +334,9 @@
 
     ensureGlobalStyles();
     preserveBrandArea(sidebar);
+
+    var footer = sidebar.querySelector(".v2board-copyright");
+    if (footer) wrapFooterText(footer);
 
     if (!toggleHost || !document.body.contains(toggleHost)) {
       toggleHost = null;
